@@ -40,8 +40,18 @@ def search_listings(
     description: str,
     size: str | None = None,
     max_price: float | None = None,
-) -> list[dict]:
+) -> list:
     """
+    Search the mock listings dataset for items matching the description,
+    optional size, and optional price ceiling.
+
+    Args:
+        description: Keywords describing what the user is looking for
+                     (e.g., "vintage graphic tee").
+        size:        Size string to filter by, or None to skip size filtering.
+                     Matching is case-insensitive (e.g., "M" matches "S/M").
+        max_price:   Maximum price (inclusive), or None to skip price filtering.
+
     Search the mock listings dataset for items matching the description,
     optional size, and optional price ceiling.
 
@@ -70,7 +80,80 @@ def search_listings(
     Before writing code, fill in the Tool 1 section of planning.md.
     """
     # Replace this with your implementation
-    return []
+    
+    listings = load_listings()
+
+    keywords = {
+        word.lower()
+        for word in description.split()
+        if word.strip()
+    }
+
+    scored_results = []
+
+    for listing in listings:
+
+        # Price filter
+        if max_price is not None:
+            if listing["price"] > max_price:
+                continue
+
+        # Size filter
+        if size is not None:
+            item_size = listing.get("size", "").lower()
+            if size.lower() not in item_size:
+                continue
+
+        score = 0
+        title = listing.get("title", "").lower()
+        query_text = description.lower()
+
+        if "boot" in query_text and "boot" in title:
+            score += 10
+
+        if "jacket" in query_text and "jacket" in title:
+            score += 10
+
+        if "tee" in query_text and "tee" in title:
+            score += 10
+
+        if "skirt" in query_text and "skirt" in title:
+            score += 10
+
+
+        for keyword in keywords:
+
+            keyword = keyword.lower()
+
+            # Most important: title matches
+            if keyword in listing.get("title", "").lower():
+                score += 3
+
+            # Next most important: category matches
+            elif keyword in listing.get("category", "").lower():
+                score += 2
+
+            # Least important: description/style tag matches
+            elif (
+                keyword in listing.get("description", "").lower()
+                or keyword in " ".join(
+                    listing.get("style_tags", [])
+                ).lower()
+            ):
+                score += 1
+
+        if score > 0:
+            scored_results.append((score, listing))
+
+    scored_results.sort(
+        key=lambda x: x[0],
+        reverse=True
+    )
+
+    return [
+        listing
+        for score, listing in scored_results
+    ]
 
 
 # ── Tool 2: suggest_outfit ────────────────────────────────────────────────────
@@ -101,7 +184,61 @@ def suggest_outfit(new_item: dict, wardrobe: dict) -> str:
     Before writing code, fill in the Tool 2 section of planning.md.
     """
     # Replace this with your implementation
-    return ""
+
+    client = _get_groq_client()
+
+    wardrobe_items = wardrobe.get("items", [])
+
+    item_name = new_item.get("title", "item")
+
+    if not wardrobe_items:
+
+        prompt = f"""
+        A user is considering buying:
+
+        {item_name}
+
+        Give 1-2 outfit ideas and general styling advice.
+        Explain what aesthetic the item fits and what types
+        of clothing pair well with it.
+        """
+
+    else:
+
+        wardrobe_text = "\n".join(
+            [
+                f"- {item.get('name', item.get('title', 'Unnamed Item'))}"
+                for item in wardrobe_items
+            ]
+        )
+
+        prompt = f"""
+        New thrift item:
+
+        {item_name}
+
+        User wardrobe:
+
+        {wardrobe_text}
+
+        Create 1-2 complete outfits using the new item
+        and pieces from the wardrobe.
+
+        Explain why each outfit works.
+        """
+
+    response = client.chat.completions.create(
+        model="openai/gpt-oss-120b",
+        temperature=0.7,
+        messages=[
+            {
+                "role": "user",
+                "content": prompt
+            }
+        ]
+    )
+
+    return response.choices[0].message.content.strip()
 
 
 # ── Tool 3: create_fit_card ───────────────────────────────────────────────────
@@ -134,4 +271,51 @@ def create_fit_card(outfit: str, new_item: dict) -> str:
     Before writing code, fill in the Tool 3 section of planning.md.
     """
     # Replace this with your implementation
-    return ""
+
+    if not outfit or not outfit.strip():
+        return (
+            "Unable to create a fit card because "
+            "no outfit suggestion was provided."
+        )
+
+    client = _get_groq_client()
+
+    title = new_item.get("title", "Unknown Item")
+    price = new_item.get("price", "Unknown Price")
+    platform = new_item.get("platform", "Unknown Platform")
+
+    prompt = f"""
+    Create a short social-media style caption.
+
+    Item:
+    {title}
+
+    Price:
+    ${price}
+
+    Platform:
+    {platform}
+
+    Outfit:
+    {outfit}
+
+    Requirements:
+    - 2 to 4 sentences
+    - casual and authentic
+    - mention item, price, and platform naturally
+    - describe the vibe
+    - sound like a real OOTD post
+    """
+
+    response = client.chat.completions.create(
+        model="openai/gpt-oss-120b",
+        temperature=1.0,
+        messages=[
+            {
+                "role": "user",
+                "content": prompt
+            }
+        ]
+    )
+
+    return response.choices[0].message.content.strip()

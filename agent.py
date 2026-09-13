@@ -18,6 +18,7 @@ Usage (once implemented):
     print(result["error"])   # None on success
 """
 
+import re
 from tools import search_listings, suggest_outfit, create_fit_card
 
 
@@ -93,8 +94,86 @@ def run_agent(query: str, wardrobe: dict) -> dict:
     of planning.md — your implementation should match what you described there.
     """
     # TODO: implement the planning loop
+
     session = _new_session(query, wardrobe)
-    session["error"] = "Planning loop not yet implemented."
+
+    # -------------------------
+    # Step 1: Parse query
+    # -------------------------
+
+    max_price = None
+    size = None
+
+    price_match = re.search(r"under \$?(\d+)", query.lower())
+    if price_match:
+        max_price = float(price_match.group(1))
+
+    size_match = re.search(
+        r"\b(xxs|xs|s|m|l|xl|xxl)\b",
+        query.lower()
+    )
+    if size_match:
+        size = size_match.group(1).upper()
+
+    description = query
+
+    session["parsed"] = {
+        "description": description,
+        "size": size,
+        "max_price": max_price,
+    }
+
+    # -------------------------
+    # Step 2: Search listings
+    # -------------------------
+
+    results = search_listings(
+        description=description,
+        size=size,
+        max_price=max_price,
+    )
+
+    session["search_results"] = results
+
+    if not results:
+        session["error"] = (
+            "No matching listings found. "
+            "Try broadening your search."
+        )
+        return session
+
+    # -------------------------
+    # Step 3: Select item
+    # -------------------------
+
+    session["selected_item"] = results[0]
+
+    # -------------------------
+    # Step 4: Suggest outfit
+    # -------------------------
+
+    outfit = suggest_outfit(
+        session["selected_item"],
+        wardrobe
+    )
+
+    session["outfit_suggestion"] = outfit
+
+    # -------------------------
+    # Step 5: Create fit card
+    # -------------------------
+
+    fit_card = create_fit_card(
+        outfit,
+        session["selected_item"]
+    )
+
+    session["fit_card"] = fit_card
+
+    # -------------------------
+    # Done
+    # -------------------------
+
     return session
 
 

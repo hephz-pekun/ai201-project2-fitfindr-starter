@@ -394,9 +394,75 @@ create_fit_card
      before trusting it" is a plan. -->
 
 **Milestone 3 — Individual tool implementations:**
+#### search_listings
 
-**Milestone 4 — Planning loop and state management:**
+- AI Tool Used: Microsoft Copilot
+- Input Provided:
+     - Tool 1 specification from planning.md
+     - Function stub and docstring from tools.py
+     - Dataset schema from listings.json
+- Expected Output:
+     - A search function that loads listings, filters by size and price, scores listings based on keyword relevance, and returns sorted results.
+- Verification:
+     - Ran pytest tests for successful searches, empty results, and price filtering.
+     - Tested manually with queries such as:
+          - "vintage graphic tee under $30"
+          - "flowy midi skirt under $40"
+          - "designer ballgown size XXS under $5"
+     - Confirmed empty searches return an empty list rather than raising an exception.
 
+#### suggest_outfit
+- AI Tool Used: Microsoft Copilot
+- Input Provided:
+     - Tool 2 specification from planning.md
+     - Function stub and docstring from tools.py
+     - Wardrobe schema and example wardrobe
+- Expected Output:
+     - A function that sends the selected item and wardrobe information to the Groq LLM and returns outfit suggestions.
+- Verification:
+     - Tested with both example and empty wardrobes.
+     - Confirmed the function returns styling advice when the wardrobe is empty.
+     - Confirmed the function returns a non-empty string and does not crash.
+
+#### create_fit_card
+- AI Tool Used: Microsoft Copilot
+- Input Provided:
+     - Tool 3 specification from planning.md
+     - Function stub and docstring from tools.py
+- Expected Output:
+     - A function that generates a social-media style outfit caption using the selected item and outfit suggestion.
+- Verification:
+     - Tested using multiple outfit suggestions.
+     - Confirmed empty outfit input returns an error message string instead of causing a crash.
+     - Confirmed generated captions include the item, price, and platform.
+
+### Milestone 4 — Planning loop and state management
+
+- AI Tool Used: Microsoft Copilot
+- Input Provided:
+     - Planning Loop section from planning.md
+     - State Management section from planning.md
+     - Architecture diagram
+     - agent.py function stub
+- Expected Output:
+     - A run_agent() implementation that coordinates tool calls and updates session state.
+- Verification:
+     - Confirmed search results are stored in session["search_results"].
+     - Confirmed the selected item is stored in session["selected_item"].
+     - Confirmed the outfit suggestion is stored in session["outfit_suggestion"].
+     - Confirmed the fit card is stored in session["fit_card"].
+     - Confirmed the no-results branch returns early and does not call suggest_outfit() or create_fit_card().
+
+**Milestone 4 — Gradio Integration:**
+- AI Tool Used: Microsoft Copilot
+- Input Provided:
+     - handle_query() requirements from app.py
+     - State structure from planning.md
+- Expected Output:
+     - A function that takes user input, calls run_agent(), and formats results for display in the interface.
+- Verification:
+     - Tested valid queries and confirmed all three output panels populate correctly.
+     - Tested invalid queries and confirmed error messages appear in the listing panel while the other panels remain empty.
 ---
 
 ## A Complete Interaction (Step by Step)
@@ -407,12 +473,98 @@ Write out what a full user interaction looks like from start to finish — tool 
 
 **Step 1:**
 <!-- What does the agent do first? Which tool is called? With what input? -->
+The user submits the query through the FitFindr interface.
+The agent initializes a new session object:
+{
+"query": "...",
+"parsed": {},
+"search_results": [],
+"selected_item": None,
+"wardrobe": {...},
+"outfit_suggestion": None,
+"fit_card": None,
+"error": None
+}
 
 **Step 2:**
 <!-- What happens next? What was returned from step 1? What tool is called now? -->
+The planning loop parses the query and extracts:
+{
+"description": "vintage graphic tee under $30",
+"size": None,
+"max_price": 30
+}
+The parsed values are stored in:
+session["parsed"]
 
 **Step 3:**
 <!-- Continue until the full interaction is complete -->
+The agent calls:
+search_listings(
+description="vintage graphic tee under $30",
+size=None,
+max_price=30
+)
+The tool searches the listings dataset and returns a ranked list of matching items.
+The results are stored in:
+session["search_results"]
+
+### Step 4
+The planning loop checks if any results were found.
+If the results list is empty:
+- session["error"] is populated.
+- The agent returns early.
+In this example, matching items are found.
+
+### Step 5
+The highest-ranked listing is selected and stored:
+session["selected_item"]
+Example:
+{
+"title": "Vintage Graphic Hoodie — Faded Black",
+"price": 25,
+...
+}
+
+### Step 6
+The agent calls:
+suggest_outfit(
+session["selected_item"],
+session["wardrobe"]
+)
+
+The tool sends the selected item and wardrobe information to the LLM and receives outfit recommendations.
+The response is stored in:
+session["outfit_suggestion"]
+
+### Step 7
+The agent calls:
+create_fit_card(
+session["outfit_suggestion"],
+session["selected_item"]
+)
+The tool generates a social-media style caption describing the outfit.
+The response is stored in:
+session["fit_card"]
+
+### Step 8
+The planning loop confirms:
+- Search completed successfully.
+- A listing was selected.
+- An outfit was generated.
+- A fit card was generated.
+The completed session is returned to the interface.
 
 **Final output to user:**
 <!-- What does the user actually see at the end? -->
+Top Listing Found:
+Title: Vintage Graphic Hoodie — Faded Black
+Price: $25
+Platform: Depop
+Description: Oversized vintage-inspired hoodie with faded graphics and a relaxed fit.
+
+Outfit Idea:
+Pair the hoodie with baggy jeans and chunky sneakers for a relaxed vintage streetwear look. Add a crossbody bag and layered accessories for extra texture and personality.
+
+Your Fit Card:
+Just picked up this faded vintage graphic hoodie on Depop for $25 and it instantly became the centerpiece of today's fit. Paired it with baggy jeans and chunky sneakers for an easy vintage streetwear vibe. Comfortable, relaxed, and perfect for everyday wear.
